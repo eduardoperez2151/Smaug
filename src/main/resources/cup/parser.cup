@@ -1,0 +1,215 @@
+package while_ut2.parser;
+
+import while_ut2.ast.*;
+import java.io.*;
+import java.util.*;
+import java_cup.runtime.Symbol;
+
+parser code {:
+
+	public void syntax_error(Symbol currentToken) {
+		report_error("Syntax error at [" + (currentToken.left+1) +"," + (currentToken.right+1) +"]", null);
+	}
+
+	public static Symbol parse(Reader input) throws Exception {
+		return (new Parser(new Lexer(input))).parse();
+	}
+
+	public static void main(String[] args) throws Exception {
+		if (args.length < 1) {
+			System.out.println(parse(new InputStreamReader(System.in, "UTF8")).value);
+		} else for (int i = 0; i < args.length; ++i) {
+			System.out.println(parse(new InputStreamReader(new FileInputStream(args[i]), "UTF8")).value);
+		}
+	}
+
+:}
+
+terminal String NAME;
+terminal FUNCTION;
+terminal IF, THEN, ELSE, WHILE, DO;
+terminal Boolean TRUE, FALSE;
+terminal ASSIGNMENT;
+terminal COMPARE_LESS, COMPARE_GREATER, COMPARE_LESS_OR_EQUAL, COMPARE_GREATER_OR_EQUAL, COMPARE_EQUAL, COMPARE_NOT_EQUAL;
+terminal DISJUNCTION, CONJUNCTION, NEGATION;
+terminal PARENTESISIZQ, PARENTESISDER, LLAVEIZQ, LLAVEDER, COMMA, SEMICOLON;
+terminal Double NUMERAL;
+terminal TIME;
+terminal ADDITION, SUBSTRACTION, MULTIPLICATION, DIVISION;
+terminal RETURN;
+
+non terminal ArrayList<String> FUNC_ARGS_ARR;
+non terminal ArrayList<Decl> LIST_DECLS_ARR;
+non terminal ArrayList<Exp> LIST_EXP_ARR;
+non terminal ArrayList<Stmt> SEQUENCE_ARR;
+non terminal Exp EXP;
+non terminal Stmt STMT;
+non terminal StmtExp STMTEXP;
+non terminal Decl DECL;
+non terminal String[] FUNC_ARGS;
+non terminal Decl[] LIST_DECLS;
+non terminal Exp[] LIST_EXP;
+non terminal Sequence SEQUENCE;
+non terminal Prog program;
+
+precedence left ELSE, SEMICOLON;
+precedence left ASSIGNMENT;
+precedence left DISJUNCTION;
+precedence left CONJUNCTION;
+precedence left COMPARE_EQUAL, COMPARE_NOT_EQUAL;
+precedence left COMPARE_LESS, COMPARE_GREATER, COMPARE_LESS_OR_EQUAL, COMPARE_GREATER_OR_EQUAL;
+precedence left ADDITION, SUBSTRACTION;
+precedence left MULTIPLICATION, DIVISION;
+precedence right NEGATION;
+
+
+start with program;
+
+
+program ::= SEQUENCE:s
+        {: RESULT = new Prog(new Decl[]{}, s); :}
+        |
+        LIST_DECLS:l SEQUENCE:s
+        {: RESULT = new Prog(l, s); :}
+;
+
+LIST_DECLS ::= LIST_DECLS_ARR:l
+           {: RESULT = l.toArray(new Decl[l.size()]); :}
+;
+           
+LIST_DECLS_ARR ::= DECL:d
+           {: RESULT = new ArrayList<Decl>(); RESULT.add(d); :}
+           |
+           LIST_DECLS_ARR:l DECL:d
+           {: RESULT = l; RESULT.add(d); :}
+;
+
+DECL ::= FUNCTION NAME:n FUNC_ARGS:a SEQUENCE:s
+     {: RESULT = new FunctionDefinition(n, a, s); :}
+;
+
+FUNC_ARGS ::= PARENTESISIZQ PARENTESISDER
+          {: RESULT = new String[]{}; :}
+          |
+          PARENTESISIZQ FUNC_ARGS_ARR:a PARENTESISDER
+          {: RESULT = a.toArray(new String[a.size()]); :}
+;
+              
+FUNC_ARGS_ARR ::= NAME:a
+          {: RESULT = new ArrayList<String>(); RESULT.add(a); :}
+          |
+          FUNC_ARGS_ARR:l COMMA NAME:a
+          {: l.add(a); RESULT = l; :}
+;
+
+SEQUENCE ::= LLAVEIZQ LLAVEDER
+         {: RESULT = new Sequence(new Stmt[]{}); :}
+         |
+         LLAVEIZQ SEQUENCE_ARR:s LLAVEDER
+         {: RESULT = new Sequence(s.toArray(new Stmt[s.size()])); :}
+;
+
+SEQUENCE_ARR ::= STMT:s
+             {: RESULT = new ArrayList<Stmt>(); RESULT.add(s); :}
+             |
+             SEQUENCE_ARR:seq STMT:stmt 
+             {: RESULT = seq; RESULT.add(stmt); :}
+;
+
+STMT ::= IF EXP:cond THEN STMT:thenBody
+     {: RESULT = new IfThenElse(cond, thenBody, null); :}
+     |
+     IF EXP:cond THEN STMT:thenBody ELSE STMT:elseBody
+     {: RESULT = new IfThenElse(cond, thenBody, elseBody); :}
+     |
+     WHILE EXP:cond DO STMT:body
+     {: RESULT = new WhileDo(cond, body); :}
+     |
+     NAME:var ASSIGNMENT EXP:e SEMICOLON
+     {: RESULT = new Assignment(var, e); :}
+     |
+     RETURN EXP:e SEMICOLON
+     {: RESULT = new Return(e); :}
+     |
+     STMTEXP:e SEMICOLON
+     {: RESULT = new ExpAsStmt(e); :}
+     |
+     SEQUENCE:s
+     {: RESULT = s; :}
+;
+
+EXP ::= NUMERAL:n
+    {: RESULT = new Numeral(n); :}
+    |
+    EXP:e1 ADDITION EXP:e2
+    {: RESULT = new Addition(e1, e2); :}
+    |
+    EXP:e1 SUBSTRACTION EXP:e2
+    {: RESULT = new Subtraction(e1, e2); :}
+    |
+    EXP:e1 MULTIPLICATION EXP:e2
+    {: RESULT = new Multiplication(e1, e2); :}
+    |
+    EXP:e1 DIVISION EXP:e2
+    {: RESULT = new Division(e1, e2); :}
+    |
+    TRUE:b
+    {: RESULT = new TruthValue(b); :}
+    |
+    FALSE:b
+    {: RESULT = new TruthValue(b); :}
+    |
+    EXP:e1 COMPARE_LESS EXP:e2
+    {: RESULT = new CompareLess(e1, e2); :}
+    |
+    EXP:e1 COMPARE_GREATER EXP:e2
+    {: RESULT = new CompareGreater(e1, e2); :}
+    |
+    EXP:e1 COMPARE_LESS_OR_EQUAL EXP:e2
+    {: RESULT = new CompareLessOrEqual(e1, e2); :}
+    |
+    EXP:e1 COMPARE_GREATER_OR_EQUAL EXP:e2
+    {: RESULT = new CompareGreaterOrEqual(e1, e2); :}
+    |
+    EXP:e1 COMPARE_EQUAL EXP:e2
+    {: RESULT = new CompareEqual(e1, e2); :}
+    |
+    EXP:e1 COMPARE_NOT_EQUAL EXP:e2
+    {: RESULT = new CompareNotEqual(e1, e2); :}
+    |
+    EXP:e1 DISJUNCTION EXP:e2
+    {: RESULT = new Disjunction(e1, e2); :}
+    |
+    EXP:e1 CONJUNCTION EXP:e2
+    {: RESULT = new Conjunction(e1, e2); :}
+    |
+    NEGATION EXP:e
+    {: RESULT = new Negation(e); :}
+    |
+    TIME
+    {: RESULT = new Time(); :}
+    |
+    NAME:var
+    {: RESULT = new Variable(var); :}
+    |
+    STMTEXP:e
+    {: RESULT = e; :}
+;
+
+STMTEXP ::= NAME:id PARENTESISIZQ PARENTESISDER
+        {: RESULT = new FunctionCall(id, new Exp[]{}); :}
+        |
+        NAME:id PARENTESISIZQ LIST_EXP:l PARENTESISDER
+        {: RESULT = new FunctionCall(id, l); :}
+;
+
+LIST_EXP ::= LIST_EXP_ARR:l
+         {: RESULT = l.toArray(new Exp[l.size()]); :}
+;
+
+LIST_EXP_ARR ::= EXP:e
+             {: RESULT = new ArrayList<Exp>(); RESULT.add(e); :}
+             |
+             LIST_EXP_ARR:l COMMA EXP:e
+             {: RESULT = l; RESULT.add(e); :}
+;
